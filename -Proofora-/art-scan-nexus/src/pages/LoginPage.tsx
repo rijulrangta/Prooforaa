@@ -12,16 +12,116 @@ const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      toast.success("Welcome back!");
-      navigate("/dashboard");
-    }, 1500);
+    setError(""); // Clear previous errors
+
+    try {
+      console.log('[Login] Starting login request for:', email);
+      
+      const requestBody = { email, password };
+      console.log('[Login] Request payload:', { email, password: '***' });
+
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+
+      console.log('[Login] Response status:', response.status);
+      console.log('[Login] Response headers:', Object.fromEntries(response.headers.entries()));
+
+      // Check if response is JSON
+      const contentType = response.headers.get("content-type");
+      let data: any = null;
+
+      if (contentType && contentType.includes("application/json")) {
+        try {
+          data = await response.json();
+          console.log('[Login] Response data:', data);
+        } catch (jsonError) {
+          console.error('[Login] Failed to parse JSON response:', jsonError);
+          const textResponse = await response.text();
+          console.error('[Login] Raw response:', textResponse);
+          setError(`Server error: Received non-JSON response (Status: ${response.status}). Check console for details.`);
+          return;
+        }
+      } else {
+        const textResponse = await response.text();
+        console.error('[Login] Non-JSON response received:', textResponse);
+        setError(`Server error: Expected JSON but got ${contentType || 'unknown type'} (Status: ${response.status}). Check console for details.`);
+        return;
+      }
+
+      if (response.ok) {
+        // Validate token exists
+        if (!data.token) {
+          console.error('[Login] No token in successful response:', data);
+          setError("Login successful but no token received. Please contact support.");
+          return;
+        }
+
+        console.log('[Login] Token received, saving to localStorage');
+        localStorage.setItem("token", data.token);
+        
+        console.log('[Login] Showing success toast');
+        toast.success("Welcome back!");
+        
+        // Small delay to ensure toast is visible before navigation
+        setTimeout(() => {
+          try {
+            console.log('[Login] Navigating to dashboard');
+            navigate("/dashboard");
+          } catch (navError) {
+            console.error('[Login] Navigation error:', navError);
+            setError("Login successful but navigation failed. Please manually go to dashboard.");
+          }
+        }, 100);
+      } else {
+        // Handle error responses
+        console.error('[Login] Login failed:', { status: response.status, data });
+        
+        if (response.status === 403) {
+          setError(
+            data?.message ||
+              'Access denied. Only these users can login: bhavya@gmail.com, rijul@gmail.com, vanni@gmail.com'
+          );
+        } else if (response.status === 400) {
+          setError(data?.message || "Invalid email or password. Please check your credentials.");
+        } else if (response.status === 404) {
+          setError("Login endpoint not found. Please check if backend is running on port 5001.");
+        } else if (response.status === 500) {
+          setError("Server error. Please try again later or contact support.");
+        } else {
+          setError(data?.message || `Login failed (Status: ${response.status}). Please try again.`);
+        }
+      }
+    } catch (error) {
+      console.error('[Login] Exception caught:', error);
+      
+      // Detect specific error types
+      if (error instanceof TypeError) {
+        if (error.message.includes('fetch')) {
+          console.error('[Login] Network error - likely CORS or backend not running');
+          setError("Network error: Cannot connect to server. Please check:\n1. Backend is running on port 5001\n2. Vite proxy is configured correctly\n3. No CORS issues");
+        } else {
+          setError(`Network error: ${error.message}. Check console for details.`);
+        }
+      } else if (error instanceof SyntaxError) {
+        console.error('[Login] JSON parsing error');
+        setError("Invalid response from server. Please check console for details.");
+      } else {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('[Login] Unknown error:', errorMessage);
+        setError(`Unexpected error: ${errorMessage}. Check console for details.`);
+      }
+    } finally {
+      setIsLoading(false);
+      console.log('[Login] Request completed');
+    }
   };
 
   return (
@@ -55,6 +155,7 @@ const LoginPage = () => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Email Field */}
             <div className="space-y-2">
               <Label htmlFor="email" className="text-gray-300">
                 Email
@@ -73,6 +174,7 @@ const LoginPage = () => {
               </div>
             </div>
 
+            {/* Password Field */}
             <div className="space-y-2">
               <Label htmlFor="password" className="text-gray-300">
                 Password
@@ -91,6 +193,12 @@ const LoginPage = () => {
               </div>
             </div>
 
+            {/* Error Message */}
+            {error && (
+              <p className="text-red-500 text-center">{error}</p>
+            )}
+
+            {/* Submit Button */}
             <Button
               type="submit"
               disabled={isLoading}

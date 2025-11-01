@@ -13,16 +13,60 @@ const RegisterPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      toast.success("Account created successfully!");
-      navigate("/dashboard");
-    }, 1500);
+
+    try {
+      console.log("register: sending request", { fullName: name, email });
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName: name, email, password }),
+      });
+
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch (err) {
+        console.error("register: failed to parse JSON", err);
+      }
+
+      if (response.ok) {
+        // Save the JWT token in localStorage
+        if (data?.token) localStorage.setItem("token", data.token);
+
+        // Display success toast
+        toast.success("Account created successfully!");
+
+        // Redirect to dashboard after successful registration
+        navigate("/dashboard");
+      } else {
+        console.error("register: non-OK response", {
+          status: response.status,
+          data,
+        });
+        if (response.status === 403) {
+          setError(
+            data?.message ||
+              "Registration is restricted. Use: bhavya@example.com, rijul@example.com, vanni@example.com"
+          );
+        } else {
+          setError(
+            data?.message ||
+              `Registration failed (${response.status}). Please try again.`
+          );
+        }
+      }
+    } catch (error) {
+      console.error("register: network error", error);
+      setError("Network error. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -39,7 +83,10 @@ const RegisterPage = () => {
         className="relative w-full max-w-md"
       >
         {/* Logo Header */}
-        <Link to="/" className="flex items-center justify-center space-x-2 mb-8">
+        <Link
+          to="/"
+          className="flex items-center justify-center space-x-2 mb-8"
+        >
           <Shield className="w-8 h-8 text-purple-500" />
           <span className="text-2xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-purple-400 bg-clip-text text-transparent">
             DesignGuard
@@ -55,7 +102,9 @@ const RegisterPage = () => {
             <p className="text-gray-400">Start protecting your designs today</p>
           </div>
 
+          {/* Registration Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Full Name Field */}
             <div className="space-y-2">
               <Label htmlFor="name" className="text-gray-300">
                 Full Name
@@ -74,6 +123,7 @@ const RegisterPage = () => {
               </div>
             </div>
 
+            {/* Email Field */}
             <div className="space-y-2">
               <Label htmlFor="email" className="text-gray-300">
                 Email
@@ -92,6 +142,7 @@ const RegisterPage = () => {
               </div>
             </div>
 
+            {/* Password Field */}
             <div className="space-y-2">
               <Label htmlFor="password" className="text-gray-300">
                 Password
@@ -110,6 +161,10 @@ const RegisterPage = () => {
               </div>
             </div>
 
+            {/* Error Message */}
+            {error && <p className="text-red-500 text-center">{error}</p>}
+
+            {/* Submit Button */}
             <Button
               type="submit"
               disabled={isLoading}
